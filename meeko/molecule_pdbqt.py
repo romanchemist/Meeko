@@ -23,7 +23,9 @@ atom_property_definitions = {'H': 'vdw', 'C': 'vdw', 'A': 'vdw', 'N': 'vdw', 'P'
                              'MG': 'metal', 'CA': 'metal', 'FE': 'metal', 'ZN': 'metal', 'MN': 'metal',
                              'W': 'water',
                              'G0': 'glue', 'G1': 'glue', 'G2': 'glue', 'G3': 'glue',
-                             'CG0': 'glue', 'CG1': 'glue', 'CG2': 'glue', 'CG3': 'glue'}
+                             'CG0': 'glue', 'CG1': 'glue', 'CG2': 'glue', 'CG3': 'glue',
+                             'A3': 'vdw', 'A2': 'vdw', 'S4': 'hb_acc', 'S1': 'vdw', 'F2': 'vdw',
+                             'N1': 'vdw', 'H5': 'hb_don', 'O5': 'hb_acc', 'C3': 'vdw', 'C2': 'vdw'}
 
 
 def _read_ligand_pdbqt_file(pdbqt_filename, poses_to_read=-1, energy_range=-1, is_dlg=False):
@@ -36,7 +38,7 @@ def _read_ligand_pdbqt_file(pdbqt_filename, poses_to_read=-1, energy_range=-1, i
     tmp_pdbqt_string = ''
     water_indices = {*()}  
     location = 'ligand'
-    energy_best_pose = None
+    energy_best_pose = float('inf')
     is_first_pose = True
     is_model = False
     atoms_dtype = [('idx', 'i4'), ('serial', 'i4'), ('name', 'U4'), ('resid', 'i4'),
@@ -50,7 +52,9 @@ def _read_ligand_pdbqt_file(pdbqt_filename, poses_to_read=-1, energy_range=-1, i
                         'all': [], 'vdw': [],
                         'glue': [], 'reactive': []}
     pose_data = {'n_poses': None, 'active_atoms': [], 'free_energies': [], 
-                 'index_map': {}, 'pdbqt_string': []}
+                 'index_map': {}, 'pdbqt_string': [], 'inter_energies': [],
+                 'intra_energies': [], 'lig-grids_energies': [],
+                 'lig-flex_energies': []}
 
     with open(pdbqt_filename) as f:
         lines = f.readlines()
@@ -132,24 +136,27 @@ def _read_ligand_pdbqt_file(pdbqt_filename, poses_to_read=-1, energy_range=-1, i
 
                     for j in range(int(len(integers) / 2)): 
                         pose_data['index_map'][integers[j*2]] = integers[j*2 + 1]
-                elif line.startswith('REMARK VINA RESULT') or line.startswith('USER    Estimated Free Energy of Binding'):
+                if is_dlg==False and line.startswith('REMARK VINA RESULT'):
                     # Read free energy from output PDBQT files
-                    try:
-                        # Vina
-                        energy = float(line.split()[3])
-                    except:
-                        # AD4
-                        energy = float(line.split()[7])
-
-                    if energy_best_pose is None:
-                        energy_best_pose = energy
-                    energy_current_pose = energy
-
-                    diff_energy = energy_current_pose - energy_best_pose
+                    current_energy = float(line.split()[3])
+                    energy_best_pose = min(energy_best_pose, current_energy)
+                    diff_energy = current_energy - energy_best_pose
                     if (energy_range <= diff_energy and energy_range != -1):
                         break
+                    pose_data['free_energies'].append(current_energy)
 
-                    pose_data['free_energies'].append(energy)
+            elif is_dlg and line.startswith('USER    Estimated Free Energy of Binding'):
+                # can't use energy_range here because poses aren't sorted
+                current_energy = float(line.split()[7])
+                pose_data['free_energies'].append(current_energy)
+            elif is_dlg and line.startswith('USER    (1) Final Intermolecular Energy'):
+                pose_data['inter_energies'].append(float(line.split()[6]))
+            elif is_dlg and line.startswith('USER    (2) Final Total Internal Energy'):
+                pose_data['intra_energies'].append(float(line.split()[7]))
+            elif is_dlg and line.startswith('USER        Moving Ligand-Fixed Receptor'):
+                pose_data['lig-grids_energies'].append(float(line.split()[5]))
+            elif is_dlg and line.startswith('USER        Moving Ligand-Moving Receptor'):
+                pose_data['lig-flex_energies'].append(float(line.split()[5]))
             elif line.startswith('BEGIN_RES'):
                 location = 'flexible_residue'
             elif line.startswith('END_RES'):
