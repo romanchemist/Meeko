@@ -37,7 +37,8 @@ class HydrateMoleculeLegacy:
                            'NA': {
                                       1: (1, 1), # neigh: 1, wat: 3, sp1
                                       2: (1, 2), # neigh: 2, wat: 1, sp2
-                                      3: (1, 3)  # neigh: 3, wat: 1, sp3
+                                      3: (1, 3), # neigh: 3, wat: 1, sp3
+                                      4: (1, 3)  # fix for protonated N with neigh: 3, sp3. Also add 1 water 
                                   }
                            }
 
